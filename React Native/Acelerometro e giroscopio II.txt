@@ -1,0 +1,217 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View, Dimensions, ScrollView, Button, Alert } from 'react-native';
+import { Accelerometer, Gyroscope } from 'expo-sensors';
+import { LineChart } from 'react-native-chart-kit';
+import * as FileSystem from 'expo-file-system';
+import Papa from 'papaparse';
+
+// ---- Configurações ----
+const UPDATE_MS = 100;        // período de amostragem (ms)
+const MAX_POINTS = 60;        // pontos visíveis no gráfico (efeito osciloscópio)
+const PEAK_THRESHOLD = 1.3;   // limiar de pico (módulo da aceleração)
+const HYSTERESIS = 0.2;       // histerese para evitar múltiplas contagens no mesmo pico
+const CLAMP_RANGE = 32;       // clamp de segurança para valores absurdos
+
+// ---- Helpers seguros ----
+const isFiniteNumber = (n) => Number.isFinite(n);
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const safeNum = (n, fallback = 0) =>
+  isFiniteNumber(n) ? clamp(n, -CLAMP_RANGE, CLAMP_RANGE) : fallback;
+
+const safeVec = (v) => ({
+  x: safeNum(v?.x),
+  y: safeNum(v?.y),
+  z: safeNum(v?.z),
+});
+
+const fmt = (n) => (Number.isFinite(n) ? n.toFixed(2) : '—');
+const addPoint = (arr, n) => [...arr.slice(-MAX_POINTS + 1), n];
+
+export default function App() {
+  // Estados para exibir sensores na UI
+  const [accelUI, setAccelUI] = useState({ x: 0, y: 0, z: 0 });
+  const [gyroUI, setGyroUI] = useState({ x: 0, y: 0, z: 0 });
+
+  // Dados para o gráfico (usando X de cada sensor; pode duplicar para Y/Z se quiser)
+  const [accelXSeries, setAccelXSeries] = useState([]);
+  const [gyroXSeries, setGyroXSeries] = useState([]);
+
+  // Contador de movimentos e CSV
+  const [movementCount, setMovementCount] = useState(0);
+  const [csvRows, setCsvRows] = useState([]);
+
+  // Refs com os últimos valores crus dos sensores (evita setState excessivo)
+  const accelRef = useRef({ x: 0, y: 0, z: 0 });
+  const gyroRef  = useRef({ x: 0, y: 0, z: 0 });
+  const aboveThresholdRef = useRef(false);
+  const tickerRef = useRef(null);
+
+  useEffect(() => {
+    Accelerometer.setUpdateInterval(UPDATE_MS);
+    Gyroscope.setUpdateInterval(UPDATE_MS);
+
+    // Assinantes atualizam refs (rápido) e estados de UI (para exibir números)
+    const aSub = Accelerometer.addListener((data) => {
+      const v = safeVec(data);
+      accelRef.current = v;
+      setAccelUI(v);
+    });
+
+    const gSub = Gyroscope.addListener((data) => {
+      const v = safeVec(data);
+      gyroRef.current = v;
+      setGyroUI(v);
+    });
+
+    // Ticker único: a cada UPDATE_MS, amostra ambos os sensores juntos
+    tickerRef.current = setInterval(() => {
+      const a = accelRef.current;
+      const g = gyroRef.current;
+
+      // Se algo vier inválido, aborta este tick
+      if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(a.z)) return;
+      if (!Number.isFinite(g.x) || !Number.isFinite(g.y) || !Number.isFinite(g.z)) return;
+
+      // Contagem de movimentos: pico no módulo da aceleração com histerese
+      const mag = Math.hypot(a.x, a.y, a.z); // sqrt(x^2+y^2+z^2) de forma robusta
+      if (!aboveThresholdRef.current && mag > PEAK_THRESHOLD) {
+        setMovementCount((c) => c + 1);
+        aboveThresholdRef.current = true;
+      } else if (aboveThresholdRef.current && mag < (PEAK_THRESHOLD - HYSTERESIS)) {
+        aboveThresholdRef.current = false;
+      }
+
+      // Atualiza séries do gráfico (efeito “janela deslizante”)
+      setAccelXSeries((prev) => addPoint(prev, a.x));
+      setGyroXSeries((prev) => addPoint(prev, g.x));
+
+      // Linha para CSV
+      setCsvRows((prev) => [
+        ...prev,
+        {
+          timestamp: new Date().toISOString(),
+          accel_x: a.x, accel_y: a.y, accel_z: a.z,
+          gyro_x: g.x,  gyro_y: g.y,  gyro_z: g.z,
+          accel_mag: mag,
+        },
+      ]);
+    }, UPDATE_MS);
+
+    return () => {
+      aSub.remove();
+      gSub.remove();
+      if (tickerRef.current) clearInterval(tickerRef.current);
+    };
+  }, []);
+
+  const exportCSV = async () => {
+    if (csvRows.length === 0) {
+      Alert.alert('Sem dados', 'Não há dados para exportar.');
+      return;
+    }
+    const csv = Papa.unparse(csvRows);
+    const fileUri = FileSystem.documentDirectory + 'movimentos.csv';
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      Alert.alert('Exportado!', `Arquivo salvo em:\n${fileUri}`);
+      console.log('📂 CSV salvo:', fileUri);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar o arquivo.');
+      console.error(error);
+    }
+  };
+
+  const clearData = () => {
+    setAccelXSeries([]);
+    setGyroXSeries([]);
+    setCsvRows([]);
+    setMovementCount(0);
+    aboveThresholdRef.current = false;
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>⚡ Contador de Movimentos (Accel + Gyro)</Text>
+      <Text style={styles.counter}>Movimentos: {movementCount}</Text>
+
+      <Text style={styles.sensorTitle}>Acelerômetro</Text>
+      <Text style={styles.sensorText}>
+        X: {fmt(accelUI.x)} | Y: {fmt(accelUI.y)} | Z: {fmt(accelUI.z)}
+      </Text>
+
+      <Text style={styles.sensorTitle}>Giroscópio</Text>
+      <Text style={styles.sensorText}>
+        X: {fmt(gyroUI.x)} | Y: {fmt(gyroUI.y)} | Z: {fmt(gyroUI.z)}
+      </Text>
+
+      <LineChart
+        data={{
+          labels: Array.from({ length: Math.max(accelXSeries.length, gyroXSeries.length) }, () => ''),
+          datasets: [
+            { data: accelXSeries, color: () => 'red',  strokeWidth: 2 },
+            { data: gyroXSeries,  color: () => 'blue', strokeWidth: 2 },
+          ],
+          legend: ['Accel X', 'Gyro X'],
+        }}
+        width={Dimensions.get('window').width - 20}
+        height={260}
+        chartConfig={{
+          backgroundColor: '#000',
+          backgroundGradientFrom: '#1E1E1E',
+          backgroundGradientTo: '#1E1E1E',
+          decimalPlaces: 2,
+          color: (opacity = 1) => `rgba(255,255,255,${opacity})`,
+          labelColor: () => '#fff',
+          propsForDots: { r: '0' },
+        }}
+        bezier
+        style={styles.chart}
+      />
+
+      <View style={styles.buttons}>
+        <Button title="📤 Exportar CSV" onPress={exportCSV} />
+        <Button title="🧹 Limpar" onPress={clearData} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: '#121212',
+    alignItems: 'center',
+    padding: 10,
+    paddingTop: 50,
+  },
+  title: {
+    fontSize: 20,
+    color: '#fff',
+    marginBottom: 8,
+  },
+  counter: {
+    fontSize: 18,
+    color: '#0f0',
+    marginBottom: 14,
+  },
+  sensorTitle: {
+    fontSize: 16,
+    color: '#fff',
+    marginTop: 8,
+  },
+  sensorText: {
+    fontSize: 14,
+    color: '#ccc',
+  },
+  chart: {
+    borderRadius: 10,
+    marginTop: 18,
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+    width: '90%',
+    justifyContent: 'space-between',
+  },
+});

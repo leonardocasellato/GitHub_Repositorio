@@ -1,0 +1,108 @@
+expo install expo-sensors
+expo install expo-file-system
+npm install papaparse
+
+
+
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Button, Alert, ScrollView } from 'react-native';
+import { Pedometer } from 'expo-sensors';
+import * as FileSystem from 'expo-file-system';
+import Papa from 'papaparse';
+
+export default function App() {
+  const [isPedometerAvailable, setIsPedometerAvailable] = useState('checking');
+  const [currentStepCount, setCurrentStepCount] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [subscription, setSubscription] = useState(null);
+
+  useEffect(() => {
+    // Verifica se o pedômetro está disponível
+    Pedometer.isAvailableAsync().then(
+      result => setIsPedometerAvailable(String(result)),
+      error => setIsPedometerAvailable('Erro: ' + error)
+    );
+  }, []);
+
+  const startCounting = () => {
+    if (subscription) return;
+    const sub = Pedometer.watchStepCount(result => {
+      setCurrentStepCount(result.steps);
+      setHistory(prev => [...prev, { timestamp: Date.now(), steps: result.steps }]);
+    });
+    setSubscription(sub);
+  };
+
+  const stopCounting = () => {
+    subscription && subscription.remove();
+    setSubscription(null);
+  };
+
+  const exportCSV = async () => {
+    if (history.length === 0) {
+      Alert.alert('Sem dados', 'Não há dados para exportar.');
+      return;
+    }
+    const csv = Papa.unparse(history);
+    const fileUri = FileSystem.documentDirectory + 'passos.csv';
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      Alert.alert('Exportado!', `Arquivo salvo em:\n${fileUri}`);
+      console.log('📂 CSV salvo:', fileUri);
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar o arquivo.');
+      console.error(error);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>🚶 Contador de Passos</Text>
+      <Text style={styles.info}>Disponível: {isPedometerAvailable}</Text>
+      <Text style={styles.steps}>Passos: {currentStepCount}</Text>
+
+      <View style={styles.buttons}>
+        <Button title="▶ Iniciar" onPress={startCounting} disabled={!!subscription} />
+        <Button title="⏸ Parar" onPress={stopCounting} disabled={!subscription} />
+      </View>
+
+      <View style={styles.export}>
+        <Button title="📤 Exportar CSV" onPress={exportCSV} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: '#121212',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 26,
+    color: '#fff',
+    marginBottom: 20,
+  },
+  info: {
+    color: '#ccc',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  steps: {
+    fontSize: 32,
+    color: '#fff',
+    marginBottom: 30,
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  export: {
+    marginTop: 10,
+    width: '80%',
+  },
+});

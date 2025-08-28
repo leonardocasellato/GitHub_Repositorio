@@ -1,0 +1,221 @@
+Instalar a biblioteca de sensores:
+
+expo install expo-sensors
+
+***********************
+App.js
+
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Button } from 'react-native';
+import { Accelerometer } from 'expo-sensors';
+
+export default function App() {
+  const [data, setData] = useState({
+    x: 0,
+    y: 0,
+    z: 0,
+  });
+  const [subscription, setSubscription] = useState(null);
+
+  // Função para iniciar a leitura do acelerômetro
+  const subscribe = () => {
+    setSubscription(
+      Accelerometer.addListener(accelerometerData => {
+        setData(accelerometerData);
+      })
+    );
+    // Ajusta a frequência de atualização (em ms)
+    Accelerometer.setUpdateInterval(500);
+  };
+
+  // Função para parar a leitura
+  const unsubscribe = () => {
+    subscription && subscription.remove();
+    setSubscription(null);
+  };
+
+  useEffect(() => {
+    subscribe(); // inicia ao abrir o app
+    return () => unsubscribe(); // limpa ao fechar
+  }, []);
+
+  const { x, y, z } = data;
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>📱 Acelerômetro</Text>
+      <Text style={styles.text}>X: {x.toFixed(2)}</Text>
+      <Text style={styles.text}>Y: {y.toFixed(2)}</Text>
+      <Text style={styles.text}>Z: {z.toFixed(2)}</Text>
+
+      <View style={styles.buttonContainer}>
+        <Button title="Iniciar" onPress={subscribe} disabled={!!subscription} />
+        <Button title="Parar" onPress={unsubscribe} disabled={!subscription} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#121212',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    color: '#fff',
+    marginBottom: 20,
+  },
+  text: {
+    fontSize: 20,
+    color: '#fff',
+    marginVertical: 5,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    marginTop: 30,
+    gap: 10,
+  },
+});
+
+
+*********************
+
+Criar um grafico
+
+npm install react-native-chart-kit
+
+
+expo install react-native-svg
+
+
+********************************
+
+*******************************
+
+Versao estilo osciloscopio salvando em csv
+
+npm install papaparse
+
+
+expo install expo-file-system
+
+
+**********************************
+
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Dimensions, ScrollView, Button, Alert } from 'react-native';
+import { Accelerometer } from 'expo-sensors';
+import { LineChart } from 'react-native-chart-kit';
+import Papa from 'papaparse';
+import * as FileSystem from 'expo-file-system';
+
+export default function App() {
+  const [xData, setXData] = useState([]);
+  const [yData, setYData] = useState([]);
+  const [zData, setZData] = useState([]);
+  const [history, setHistory] = useState([]);
+  const maxPoints = 30; // Pontos visíveis no gráfico
+
+  useEffect(() => {
+    Accelerometer.setUpdateInterval(100); // 100ms (10x por segundo)
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
+      // Atualiza dados do gráfico
+      setXData(prev => [...prev.slice(-maxPoints + 1), x]);
+      setYData(prev => [...prev.slice(-maxPoints + 1), y]);
+      setZData(prev => [...prev.slice(-maxPoints + 1), z]);
+
+      // Salva histórico
+      setHistory(prev => [...prev, { timestamp: Date.now(), x, y, z }]);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  const exportCSV = async () => {
+    if (history.length === 0) {
+      Alert.alert("Sem dados", "Não há dados para exportar.");
+      return;
+    }
+
+    // Converte para CSV
+    const csv = Papa.unparse(history);
+    const fileUri = FileSystem.documentDirectory + "acelerometro.csv";
+
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      Alert.alert("Exportado!", `Arquivo salvo em:\n${fileUri}`);
+      console.log("📂 CSV salvo:", fileUri);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível salvar o arquivo.");
+      console.error(error);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>📈 Acelerômetro em Tempo Real</Text>
+
+      <LineChart
+        data={{
+          labels: Array.from({ length: xData.length }, (_, i) => ""),
+          datasets: [
+            { data: xData, color: () => 'red', strokeWidth: 2 },
+            { data: yData, color: () => 'green', strokeWidth: 2 },
+            { data: zData, color: () => 'blue', strokeWidth: 2 },
+          ],
+          legend: ['Eixo X', 'Eixo Y', 'Eixo Z']
+        }}
+        width={Dimensions.get('window').width - 20}
+        height={250}
+        chartConfig={{
+          backgroundColor: '#000',
+          backgroundGradientFrom: '#1E1E1E',
+          backgroundGradientTo: '#1E1E1E',
+          decimalPlaces: 2,
+          color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+          labelColor: () => '#fff',
+          propsForDots: { r: '0' }
+        }}
+        bezier
+        style={styles.chart}
+      />
+
+      <View style={styles.buttonContainer}>
+        <Button title="📤 Exportar CSV" onPress={exportCSV} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: '#121212',
+    alignItems: 'center',
+    padding: 10,
+    paddingTop: 50,
+  },
+  title: {
+    fontSize: 22,
+    color: '#fff',
+    marginBottom: 20,
+  },
+  chart: {
+    borderRadius: 8,
+  },
+  buttonContainer: {
+    marginTop: 20,
+    width: "80%",
+  }
+});
+
+
+**********************************
+
+
+
+

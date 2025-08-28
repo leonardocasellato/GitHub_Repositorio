@@ -1,0 +1,124 @@
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity } from 'react-native';
+
+export default function App() {
+  const [num1, setNum1] = useState('');
+  const [num2, setNum2] = useState('');
+  const [resultado, setResultado] = useState(null);
+
+  const calcular = (operador) => {
+    const n1 = parseFloat(num1);
+    const n2 = parseFloat(num2);
+
+    if (isNaN(n1) || isNaN(n2)) {
+      setResultado('Insira números válidos');
+      return;
+    }
+
+    switch (operador) {
+      case '+':
+        setResultado(n1 + n2);
+        break;
+      case '-':
+        setResultado(n1 - n2);
+        break;
+      case '*':
+        setResultado(n1 * n2);
+        break;
+      case '/':
+        setResultado(n2 !== 0 ? n1 / n2 : 'Divisão por zero');
+        break;
+      default:
+        setResultado('Operação inválida');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Calculadora Simples</Text>
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Digite o primeiro número"
+        keyboardType="numeric"
+        value={num1}
+        onChangeText={setNum1}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Digite o segundo número"
+        keyboardType="numeric"
+        value={num2}
+        onChangeText={setNum2}
+      />
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity style={styles.button} onPress={() => calcular('+')}>
+          <Text style={styles.buttonText}>+</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={() => calcular('-')}>
+          <Text style={styles.buttonText}>-</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={() => calcular('*')}>
+          <Text style={styles.buttonText}>*</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={() => calcular('/')}>
+          <Text style={styles.buttonText}>/</Text>
+        </TouchableOpacity>
+      </View>
+
+      {resultado !== null && (
+        <Text style={styles.result}>Resultado: {resultado}</Text>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#e0f7fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 24,
+  },
+  input: {
+    width: '80%',
+    height: 50,
+    borderColor: '#00796b',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 12,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    width: '80%',
+  },
+  button: {
+    backgroundColor: '#00796b',
+    padding: 15,
+    borderRadius: 8,
+    width: 60,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 20,
+  },
+  result: {
+    marginTop: 24,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#004d40',
+  },
+});

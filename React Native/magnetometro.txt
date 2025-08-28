@@ -1,0 +1,62 @@
+expo install expo-sensors
+
+MagnetometerExample.js
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Magnetometer } from 'expo-sensors';
+
+export default function MagnetometerExample() {
+  const [data, setData] = useState({ x: 0, y: 0, z: 0 });
+
+  useEffect(() => {
+    // Inicia a leitura do magnetômetro
+    const subscription = Magnetometer.addListener(result => {
+      setData(result); // Atualiza o estado com os valores do sensor
+    });
+
+    // Define a frequência de atualização em ms (aqui 500ms)
+    Magnetometer.setUpdateInterval(500);
+
+    // Remove o listener quando o componente desmontar
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Magnetômetro</Text>
+      <Text style={styles.text}>x: {data.x.toFixed(2)}</Text>
+      <Text style={styles.text}>y: {data.y.toFixed(2)}</Text>
+      <Text style={styles.text}>z: {data.z.toFixed(2)}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 10 },
+  text: { fontSize: 18, marginVertical: 4 }
+});
+
+
+App.js
+
+
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import MagnetometerExample from './MagnetometerExample';
+
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Magnetômetro" component={MagnetometerExample} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+

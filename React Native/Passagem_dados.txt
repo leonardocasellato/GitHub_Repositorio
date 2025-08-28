@@ -1,0 +1,66 @@
+npm install @react-navigation/native
+npm install react-native-screens react-native-safe-area-context react-native-gesture-handler react-native-reanimated react-native-get-random-values
+npm install @react-navigation/native-stack
+
+
+App.js
+
+import * as React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import HomeScreen from './screens/HomeScreen';
+import DetailsScreen from './screens/DetailsScreen';
+
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Details" component={DetailsScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+
+
+HomeScreen.js
+
+import React from 'react';
+import { View, Text, Button } from 'react-native';
+
+export default function HomeScreen({ navigation }) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text>Página Inicial</Text>
+      <Button
+        title="Ir para detalhes"
+        onPress={() => navigation.navigate('Details', { userId: 42, userName: 'Leonardo' })}
+      />
+    </View>
+  );
+}
+
+
+DetailsScreen.js
+
+
+import React from 'react';
+import { View, Text } from 'react-native';
+
+export default function DetailsScreen({ route }) {
+  // Pegando os parâmetros enviados pela tela anterior
+  const { userId, userName } = route.params;
+
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text>Detalhes do Usuário</Text>
+      <Text>ID: {userId}</Text>
+      <Text>Nome: {userName}</Text>
+    </View>
+  );
+}
+
+
